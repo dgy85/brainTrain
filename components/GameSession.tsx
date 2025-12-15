@@ -7,9 +7,15 @@ import {
   generateSchulteGrid,
   generateVisualMatchTask,
   generateNumberSeries,
-  generateFlankerTask
+  generateFlankerTask,
+  generateReflexTask,
+  generateOrderPathTask
 } from '../lib/gameLogic';
-import { X, Clock, Brain, CheckCircle, AlertCircle, ArrowLeft, ArrowRight, ArrowUp, ArrowDown } from 'lucide-react';
+import { 
+    X, Clock, Brain, CheckCircle, AlertCircle, 
+    ArrowLeft, ArrowRight, ArrowUp, ArrowDown, 
+    Zap, Circle, Square, Triangle, Star, Hexagon 
+} from 'lucide-react';
 
 const GAME_DURATION = 60; // 60 seconds per game
 
@@ -25,6 +31,9 @@ const GameSession: React.FC<GameEngineProps> = ({ definition, onComplete, onExit
   const [memoryPhase, setMemoryPhase] = useState<'memorize' | 'recall'>('memorize');
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
 
+  // Specific state for Order Path Game
+  const [nextOrderNum, setNextOrderNum] = useState(1);
+
   const correctCountRef = useRef(0);
   const totalCountRef = useRef(0);
 
@@ -39,6 +48,8 @@ const GameSession: React.FC<GameEngineProps> = ({ definition, onComplete, onExit
       case 'visual': return generateVisualMatchTask(difficulty);
       case 'logic': return generateNumberSeries(difficulty);
       case 'flanker': return generateFlankerTask(difficulty);
+      case 'reflex': return generateReflexTask(difficulty);
+      case 'order': return generateOrderPathTask(difficulty);
       default: return {};
     }
   }, [definition.id, difficulty]);
@@ -50,7 +61,10 @@ const GameSession: React.FC<GameEngineProps> = ({ definition, onComplete, onExit
         setMemoryPhase('memorize');
         setSelectedIndices(new Set());
     }
-  }, []); // Run once on mount, subsequent updates handled in handleAnswer
+    if(definition.id === 'order') {
+        setNextOrderNum(1);
+    }
+  }, []); 
 
   // Timer
   useEffect(() => {
@@ -84,8 +98,8 @@ const GameSession: React.FC<GameEngineProps> = ({ definition, onComplete, onExit
 
   const handleAnswer = (isCorrect: boolean) => {
     if (isCorrect) {
-      // For Memory game, we only count 'total' when the full round is done or failed
-      if (definition.id !== 'memory') totalCountRef.current += 1;
+      // For multi-step games, we only count 'total' when the full round is done
+      if (definition.id !== 'memory' && definition.id !== 'order') totalCountRef.current += 1;
       
       setFeedback('correct');
       correctCountRef.current += 1;
@@ -102,50 +116,81 @@ const GameSession: React.FC<GameEngineProps> = ({ definition, onComplete, onExit
         setDifficulty(d => d + 1);
       }
     } else {
-      if (definition.id !== 'memory') totalCountRef.current += 1;
+      if (definition.id !== 'memory' && definition.id !== 'order') totalCountRef.current += 1;
 
       setFeedback('wrong');
       setStreak(0);
       if (difficulty > 1) setDifficulty(d => d - 1);
     }
 
-    // Delay next round
+    // Delay next round (Quick for Reflex)
+    const delay = definition.id === 'reflex' ? 100 : 500;
+
     setTimeout(() => {
       setFeedback(null);
       setCurrentData(generateNextRound());
+      
+      // Reset game-specific states
       if(definition.id === 'memory') {
           setMemoryPhase('memorize');
           setSelectedIndices(new Set());
       }
-    }, 500);
+      if(definition.id === 'order') {
+          setNextOrderNum(1);
+      }
+    }, delay);
   };
 
   const handleMemoryClick = (index: number) => {
-      if (selectedIndices.has(index)) return; // Already selected
-
-      // Check if this index is a target
+      if (selectedIndices.has(index)) return; 
       const isTarget = currentData.targets.includes(index);
 
       if (!isTarget) {
-          // Wrong click = Round Fail
-          totalCountRef.current += 1; // Increment attempt
+          totalCountRef.current += 1;
           handleAnswer(false);
           return;
       }
 
-      // Correct click
       const newSet = new Set(selectedIndices);
       newSet.add(index);
       setSelectedIndices(newSet);
 
-      // Check if all targets found
       if (newSet.size === currentData.targets.length) {
-          totalCountRef.current += 1; // Increment attempt
+          totalCountRef.current += 1; 
           handleAnswer(true);
       }
   };
 
-  // --- Renderers ---
+  const handleOrderClick = (num: number) => {
+      if (num === nextOrderNum) {
+          // Correct sequence
+          if (num === currentData.maxNumber) {
+              // Completed sequence
+              totalCountRef.current += 1;
+              handleAnswer(true);
+          } else {
+              setNextOrderNum(n => n + 1);
+          }
+      } else {
+          // Wrong order
+          totalCountRef.current += 1;
+          handleAnswer(false);
+          // Optional penalty: small time deduction or streak reset handled in handleAnswer
+      }
+  };
+
+  // --- Render Helpers ---
+
+  const getReflexIcon = (shape: string, className: string) => {
+      switch(shape) {
+          case 'zap': return <Zap className={className} />;
+          case 'circle': return <Circle className={className} />;
+          case 'square': return <Square className={className} />;
+          case 'triangle': return <Triangle className={className} />;
+          case 'star': return <Star className={className} />;
+          default: return <Hexagon className={className} />;
+      }
+  };
 
   const renderContent = () => {
     if (!currentData) return <div className="text-white">Loading...</div>;
@@ -209,10 +254,6 @@ const GameSession: React.FC<GameEngineProps> = ({ definition, onComplete, onExit
                {Array.from({ length: currentData.gridSize * currentData.gridSize }).map((_, i) => {
                  const isTarget = currentData.targets.includes(i);
                  const isSelected = selectedIndices.has(i);
-                 
-                 // Display logic:
-                 // In Memorize: Show Targets (Bright)
-                 // In Recall: Show Selected (Bright)
                  const showActive = (isMem && isTarget) || (!isMem && isSelected);
 
                  return (
@@ -258,7 +299,6 @@ const GameSession: React.FC<GameEngineProps> = ({ definition, onComplete, onExit
          );
 
       case 'visual':
-          // Updated Visual: Match to Sample
           return (
             <div className="flex flex-col items-center gap-8 w-full max-w-2xl">
                 <div className="flex flex-col items-center gap-2">
@@ -321,16 +361,21 @@ const GameSession: React.FC<GameEngineProps> = ({ definition, onComplete, onExit
           return (
               <div className="flex flex-col items-center gap-10">
                    <div className="text-center space-y-2">
-                       <h3 className="text-xl text-slate-300">Which way does the <span className="text-primary font-bold">CENTER</span> arrow point?</h3>
-                       <p className="text-sm text-slate-500">Ignore the outside arrows!</p>
+                       <h3 className="text-xl text-slate-300">
+                           {currentData.isReverse ? (
+                               <span className="text-red-500 font-bold animate-pulse">REVERSE: OPPOSITE OF CENTER!</span>
+                           ) : (
+                               <span>Which way does the <span className="text-primary font-bold">CENTER</span> arrow point?</span>
+                           )}
+                       </h3>
                    </div>
                    
-                   <div className="flex gap-2 md:gap-4 p-6 bg-slate-800/50 rounded-2xl border border-slate-700">
+                   <div className={`flex gap-2 md:gap-4 p-6 rounded-2xl border transition-colors duration-300 ${currentData.isReverse ? 'bg-red-900/20 border-red-500/50' : 'bg-slate-800/50 border-slate-700'}`}>
                        {currentData.sequence.map((item: any, i: number) => {
                            // Center item styling
                            const isCenter = i === Math.floor(currentData.sequence.length / 2);
                            return (
-                               <div key={i} className={`text-5xl md:text-7xl font-bold ${isCenter ? 'text-white scale-110' : 'text-slate-600'}`}>
+                               <div key={i} className={`text-5xl md:text-7xl font-bold ${isCenter ? 'scale-110' : 'opacity-60'} ${currentData.isReverse ? 'text-red-400' : (isCenter ? 'text-white' : 'text-slate-600')}`}>
                                    {item.char}
                                </div>
                            )
@@ -361,7 +406,70 @@ const GameSession: React.FC<GameEngineProps> = ({ definition, onComplete, onExit
                        </div>
                    </div>
               </div>
-          )
+          );
+
+      case 'reflex':
+          return (
+              <div className="flex flex-col items-center gap-8">
+                  <div className="text-xl text-slate-400">Click the <span className="text-yellow-400 font-bold">BRIGHT</span> icon!</div>
+                  <div 
+                      className="grid gap-3 bg-slate-900 p-6 rounded-2xl border border-slate-800"
+                      style={{ gridTemplateColumns: `repeat(${currentData.size}, minmax(0, 1fr))` }}
+                  >
+                      {currentData.items.map((item: any, i: number) => {
+                          const isActive = item.active;
+                          return (
+                              <button
+                                key={i}
+                                onMouseDown={() => isActive ? handleAnswer(true) : null}
+                                className={`
+                                    w-16 h-16 sm:w-20 sm:h-20 rounded-xl transition-all duration-75 flex items-center justify-center
+                                    ${isActive 
+                                        ? 'bg-yellow-500/20 border-2 border-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.5)] scale-105 z-10' 
+                                        : 'bg-slate-800 border border-slate-700 opacity-60 hover:opacity-100'}
+                                `}
+                              >
+                                {getReflexIcon(item.shape, isActive ? "w-8 h-8 text-yellow-400 fill-yellow-400 animate-pulse" : "w-6 h-6 text-slate-600")}
+                              </button>
+                          )
+                      })}
+                  </div>
+              </div>
+          );
+
+      case 'order':
+          return (
+             <div className="flex flex-col items-center gap-6">
+                 <div className="flex items-center gap-4 text-xl text-slate-300">
+                     <span>Next:</span> 
+                     <div className="w-12 h-12 flex items-center justify-center bg-primary rounded-full text-white font-bold text-2xl shadow-lg">
+                         {nextOrderNum}
+                     </div>
+                 </div>
+                 <div 
+                    className="grid gap-2 md:gap-3 bg-slate-800 p-4 rounded-xl"
+                    style={{ gridTemplateColumns: `repeat(${currentData.size}, minmax(0, 1fr))` }}
+                 >
+                     {currentData.grid.map((num: number, i: number) => {
+                         const isClicked = num < nextOrderNum;
+                         return (
+                            <button
+                                key={i}
+                                disabled={isClicked}
+                                onClick={() => handleOrderClick(num)}
+                                className={`
+                                    w-12 h-12 sm:w-16 sm:h-16 flex items-center justify-center rounded-lg transition-all duration-200
+                                    ${isClicked ? 'bg-slate-900 text-slate-800 scale-90 border border-slate-800' : 'bg-slate-700 hover:bg-slate-600 text-white shadow-md border-b-4 border-slate-900'}
+                                    font-bold text-xl sm:text-2xl
+                                `}
+                            >
+                                {num}
+                            </button>
+                         );
+                     })}
+                 </div>
+             </div>
+          );
 
       default:
         return null;

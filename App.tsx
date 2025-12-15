@@ -10,7 +10,9 @@ import {
   Trophy,
   History,
   RotateCcw,
-  Target
+  Target,
+  MousePointer,
+  ListOrdered
 } from 'lucide-react';
 import { UserStats, GameDefinition, StatDimension } from './types';
 import { getStats, updateStats, resetStats } from './services/storage';
@@ -25,7 +27,9 @@ const GAMES: GameDefinition[] = [
   { id: 'schulte', name: 'Focus Finder', dimension: 'attention', description: 'Scan numbers in order to improve focus.', iconName: 'eye', color: 'from-green-500 to-emerald-500' },
   { id: 'visual', name: 'Shape Shift', dimension: 'visual', description: 'Find the matching shape among distractions.', iconName: 'activity', color: 'from-teal-500 to-green-400' },
   { id: 'logic', name: 'Logic Flow', dimension: 'abstraction', description: 'Deduce number patterns and series.', iconName: 'brain', color: 'from-indigo-500 to-violet-500' },
-  { id: 'flanker', name: 'Arrow Focus', dimension: 'attention', description: 'Focus on the center, ignore the rest.', iconName: 'target', color: 'from-rose-500 to-pink-600' },
+  { id: 'flanker', name: 'Arrow Focus', dimension: 'attention', description: 'Focus on the center. Red means Reverse!', iconName: 'target', color: 'from-rose-500 to-pink-600' },
+  { id: 'reflex', name: 'Quick Reflex', dimension: 'execution', description: 'Test your motor reaction speed.', iconName: 'mouse', color: 'from-yellow-500 to-amber-500' },
+  { id: 'order', name: 'Order Path', dimension: 'attention', description: 'Select numbers in ascending order.', iconName: 'list', color: 'from-cyan-500 to-sky-500' },
 ];
 
 const getIcon = (name: string, size: number = 24) => {
@@ -36,6 +40,8 @@ const getIcon = (name: string, size: number = 24) => {
         case 'eye': return <Eye size={size} />;
         case 'activity': return <Activity size={size} />;
         case 'target': return <Target size={size} />;
+        case 'mouse': return <MousePointer size={size} />;
+        case 'list': return <ListOrdered size={size} />;
         default: return <Brain size={size} />;
     }
 };
